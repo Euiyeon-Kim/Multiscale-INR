@@ -18,7 +18,7 @@ MAPPING_SIZE = 256
 
 LR = 1e-4
 BATCH_SIZE = 16
-MAX_ITERS = 1000000
+MAX_ITERS = 10000000
 
 N_CRITIC = 5
 GEN_ITER = 1
@@ -61,7 +61,7 @@ if __name__ == '__main__':
             set_require_grads(discriminator, True)
 
             z = torch.randn((BATCH_SIZE, Z_DIM)).to(device)
-            generated = generator(grid, z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
+            generated = generator(mapped_input, z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
 
             d_optim.zero_grad()
             d_generated = discriminator(generated)
@@ -89,7 +89,7 @@ if __name__ == '__main__':
             loss_recon = recon_criterion(recon, reals) * RECON_LAMBDA
 
             adv_z = torch.randn((BATCH_SIZE, Z_DIM)).to(device)
-            generated = generator(grid, adv_z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
+            generated = generator(mapped_input, adv_z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
             d_generated = discriminator(generated)
             loss_adv = -d_generated.mean()
 
@@ -106,11 +106,11 @@ if __name__ == '__main__':
         g_scheduler.step(epoch=iter)
         d_scheduler.step(epoch=iter)
 
-        if iter % 50 == 0:
-            recon_idx = np.random.randint(high=BATCH_SIZE)
-            save_image(recon[recon_idx], f'exps/{EXP_NAME}/img/{iter}_recon.jpg')
+        if iter % 1 == 0:
+            recon_idx = np.random.randint(BATCH_SIZE, size=1)[0]
+            save_image(recon[recon_idx], f'exps/{EXP_NAME}/img/{iter}[{recon_idx}]_recon.jpg')
             save_image(generated[0], f'exps/{EXP_NAME}/img/{iter}_adv.jpg')
 
-        if iter % 1000 == 0:
+        if iter % 10000 == 0:
             torch.save(generator.state_dict(), f'exps/{EXP_NAME}/ckpt/G.pth')
             torch.save(discriminator.state_dict(), f'exps/{EXP_NAME}/ckpt/D.pth')
