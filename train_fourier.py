@@ -14,6 +14,7 @@ IMG_PATH = 'inputs/small_balloon.png'
 
 Z_DIM = 128
 SCALE = 10
+MAPPING_SIZE = 256
 
 LR = 1e-4
 BATCH_SIZE = 16
@@ -21,8 +22,8 @@ MAX_ITERS = 10000000
 
 N_CRITIC = 3
 GEN_ITER = 1
-GP_LAMBDA = 100.
-RECON_LAMBDA = 100.
+GP_LAMBDA = 1000.
+RECON_LAMBDA = 10.
 
 
 if __name__ == '__main__':
@@ -32,12 +33,19 @@ if __name__ == '__main__':
     h, w, _ = img.shape
 
     device = get_device()
-    grid = create_grid(h, w, device).repeat(BATCH_SIZE, 1, 1, 1).view(BATCH_SIZE, h*w, 2)
+
+    B_gauss = torch.randn((MAPPING_SIZE, 2)).to(device) * SCALE
+    torch.save(B_gauss, f'exps/{EXP_NAME}/ckpt/B.pth')
+
+    grid = create_grid(h, w, device)
+    mapped_input = torch.sin((2. * np.pi * grid) @ B_gauss.t())
+    mapped_input = mapped_input.repeat(BATCH_SIZE, 1, 1, 1).view(BATCH_SIZE, h*w, MAPPING_SIZE)
+
     recon_z = torch.randn((BATCH_SIZE, Z_DIM)).to(device)
     reals = torch.FloatTensor(img).permute(2, 0, 1).repeat(BATCH_SIZE, 1, 1, 1).to(device)
     real = torch.unsqueeze(torch.FloatTensor(img).permute(2, 0, 1).to(device), 0)
 
-    generator = Generator(input_dim=2, z_dim=Z_DIM, hidden_dim=256, output_dim=3).to(device)
+    generator = Generator(input_dim=MAPPING_SIZE, z_dim=Z_DIM, hidden_dim=256, output_dim=3).to(device)
     discriminator = Discriminator(in_channels=3, max_features=32, min_features=32, num_blocks=5).to(device)
     g_optim = torch.optim.Adam(generator.parameters(), lr=LR)
     d_optim = torch.optim.Adam(generator.parameters(), lr=LR)
@@ -53,7 +61,7 @@ if __name__ == '__main__':
             set_require_grads(discriminator, True)
 
             z = torch.randn((BATCH_SIZE, Z_DIM)).to(device)
-            generated = generator(grid, z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
+            generated = generator(mapped_input, z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
 
             d_optim.zero_grad()
             d_generated = discriminator(generated)
@@ -77,12 +85,11 @@ if __name__ == '__main__':
         for i in range(GEN_ITER):
             g_optim.zero_grad()
 
-            recon_z = torch.randn((BATCH_SIZE, Z_DIM)).to(device)
-            recon = generator(grid, recon_z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
+            recon = generator(mapped_input, recon_z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
             loss_recon = recon_criterion(recon, reals) * RECON_LAMBDA
 
             adv_z = torch.randn((BATCH_SIZE, Z_DIM)).to(device)
-            generated = generator(grid, adv_z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
+            generated = generator(mapped_input, adv_z).view(BATCH_SIZE, h, w, 3).permute(0, 3, 1, 2)
             d_generated = discriminator(generated)
             loss_adv = -d_generated.mean()
 
